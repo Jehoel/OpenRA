@@ -140,10 +140,24 @@ namespace OpenRA.Platforms.Default
 		public void*       driverdata;
 	}
 
+	/// <summary>SDL2.dll uses MSVCRT.dll directly for calloc/malloc/free.</summary>
+	internal static unsafe class MSVCRT
+	{
+		[DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
+		public static extern void* malloc(IntPtr size);
+
+		[DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
+		public static extern void free(void* ptr);
+
+		[DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
+		public static extern void* calloc(IntPtr num, IntPtr size);
+
+		[DllImport("msvcrt.dll", CallingConvention=CallingConvention.Cdecl)]
+		public static extern void* realloc(void* ptr, IntPtr size);
+	}
+
 	internal static class WinNativeMethods
 	{
-		
-
 		static void SDL_assert(bool cond)
 		{
 			if (!cond)
@@ -178,18 +192,32 @@ namespace OpenRA.Platforms.Default
 		// https://github.com/libsdl-org/SDL/blob/c59d4dcd38c382a1e9b69b053756f1139a861574/src/video/windows/SDL_windowsmouse.c
 		public static unsafe IntPtr SDL_WIN_CreateCursor(SDL.SDL_Surface surface, int hot_x, int hot_y)
 		{
-			/* msdn says cursor mask has to be padded out to word alignment. Not sure
-				if that means machine word or WORD, but this handles either case. */
-//			const size_t pad = (sizeof(size_t) * 8);  /* 32 or 64, or whatever. */
+			using( SafeIconHandle cursorIconHandle = CreateCursorIconFromSdlSurface( surface, hot_x, hot_y ) )
+			{
+				IntPtr num          = new IntPtr(1);
+				IntPtr sizeOfCursor = new IntPtr( Marshal.SizeOf<SDL_Cursor>() );
+
+				void* cursorPtr = MSVCRT.calloc(num: num, size: sizeOfCursor );
+				if( cursorPtr == null )
+				{
+					throw new InvalidOleVariantTypeException("calloc failed.");
+				}
+				else
+				{
+					IntPtr hIcon = cursorIconHandle.GetHIconAndDoNotDestroyIt();
+
+					SDL_Cursor* cursor = (SDL_Cursor*)cursorPtr;
+					cursor->driverdata = hIcon.ToPointer();
+					cursor->next       = null;
+					return new IntPtr( cursor );
+				}
+			}
+		}
+
+		private static SafeIconHandle CreateCursorIconFromSdlSurface(SDL.SDL_Surface surface, int hot_x, int hot_y)
+		{
 			int pad = (IntPtr.Size * 8);  /* 32 or 64, or whatever. */
-//			HICON hicon;
-//			HDC hdc;
-			IntPtr hicon;
-			IntPtr hdc;
-//			IntPtr pixels;
-//			size_t maskbitslen;
 			int maskbitslen;
-//			SDL_bool isstack;
 
 //			SDL_zero(bmh);
 
@@ -205,26 +233,7 @@ namespace OpenRA.Platforms.Default
 				bV4AlphaMask     = 0xFF000000,
 				bV4RedMask       = 0x00FF0000,
 				bV4GreenMask     = 0x0000FF00,
-				bV4BlueMask      = 0x000000FF,
-
-				/*
-				// C# needs these fields set in order for `bmh` to be fully initialized: ...or just use `new BITMAPV4HEADER`
-				bV4SizeImage     = default,
-				bV4XPelsPerMeter = default,
-				bV4YPelsPerMeter = default,
-				bV4ClrUsed       = default,
-				bV4ClrImportant  = default,
-				bV4CSType        = default,
-				RedX             = default,
-				RedY             = default,
-				RedZ             = default,
-				GreenX           = default,
-				GreenY           = default,
-				GreenZ           = default,
-				BlueX            = default,
-				BlueY            = default,
-				BlueZ            = default
-				*/
+				bV4BlueMask      = 0x000000FF
 			};
 
 			maskbitslen = ((surface.w + (pad - (surface.w % pad))) / 8) * surface.h;
@@ -233,15 +242,14 @@ namespace OpenRA.Platforms.Default
 			if (maskbits == IntPtr.Zero) {
 //				SDL_OutOfMemory();
 //				return NULL;
-				return IntPtr.Zero;
+				return null;
 			}
 
 			/* AND the cursor against full bits: no change. We already have alpha. */
-			SDL_memset(maskbits, 0xFF, maskbitslen);
+			SDL_memset( ptr: maskbits, value: 0xFF, count: maskbitslen );
 
 			SafeDibHandle dib;
-			IntPtr dibPixelData;
-
+			IntPtr        dibPixelData;
 			using( SafeDCHandle hDCEntireScreen = Gdi.GetDCForEntireScreen() )
 			{
 				BITMAPINFO bitmapInfo = new BITMAPINFO();
@@ -274,48 +282,6 @@ namespace OpenRA.Platforms.Default
 
 				return cursorIcon;
 			}
-
-
-
-			
-
-			DeleteObject(ii.hbmColor);
-			DeleteObject(ii.hbmMask);
-
-			if(hicon == IntPtr.Zero)
-			{
-				int err     = Marshal.GetLastWin32Error();
-				int hresult = Marshal.GetHRForLastWin32Error();
-				Debugger.Break();
-
-				return IntPtr.Zero;
-			}
-			else
-			{
-				Debugger.Break();
-
-				return IntPtr.Zero; // hmmm... need to return `SDL_calloc`, how?
-			}
-
-//			if (!hicon) {
-//				WIN_SetError("CreateIconIndirect()");
-//				return NULL;
-//			}
-//
-//			cursor = SDL_calloc(1, sizeof(*cursor));
-//			if (cursor) {
-//				cursor.driverdata = hicon;
-//			} else {
-//				DestroyIcon(hicon);
-//				SDL_OutOfMemory();
-//			}
-//
-//			return cursor;
-		}
-
-		private static SafeIconHandle CreateCursorIconFromSdlSurface(SDL.SDL_Surface surface, int hot_x, int hot_y)
-		{
-
 		}
 	}
 
@@ -344,18 +310,16 @@ namespace OpenRA.Platforms.Default
 				SDL.SDL_Surface sur = (SDL.SDL_Surface)Marshal.PtrToStructure(surface, typeof(SDL.SDL_Surface));
 				Marshal.Copy(data, 0, sur.pixels, data.Length);
 
-				
-
 				// This call very occasionally fails on Windows, but often works when retried.
 				for (var retries = 0; retries < 3 && Cursor == IntPtr.Zero; retries++)
 				{
-					Cursor = SDL.SDL_CreateColorCursor(surface, hotspot.X, hotspot.Y);
-					if (Cursor == IntPtr.Zero)
+					this.Cursor = SDL.SDL_CreateColorCursor(surface, hotspot.X, hotspot.Y);
+					if (this.Cursor == IntPtr.Zero)
 					{
 						int countNonZero = data.Count(b => b != 0x00);
 
 						// Let's try this...
-						WinNativeMethods.SDL_WIN_CreateCursor(sur, hotspot.X, hotspot.Y);
+						this.Cursor = WinNativeMethods.SDL_WIN_CreateCursor(sur, hotspot.X, hotspot.Y);
 
 						Debugger.Break();
 					}

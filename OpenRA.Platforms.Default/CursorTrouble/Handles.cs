@@ -63,14 +63,18 @@ namespace OpenRA.Platforms.Default
 			base.SetHandle( hIcon );
 		}
 
+		private bool doNotDestory;
+
+		public IntPtr GetHIconAndDoNotDestroyIt()
+		{
+			this.doNotDestory = true;
+			return this.handle;
+		}
+
 		protected override bool ReleaseHandle()
 		{
-			if (!this.IsInvalid)
+			if (!this.IsInvalid && this.doNotDestory == false)
 			{
-				// https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-releasedc
-				// > The return value indicates whether the DC was released. If the DC was released, the return value is 1.
-				// > If the DC was not released, the return value is zero.
-
 				bool ok = Gdi.GdiNativeMethods.DestroyIcon( this.handle );
 				if (ok)
 				{
