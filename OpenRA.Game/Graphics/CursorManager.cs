@@ -106,7 +106,7 @@ namespace OpenRA.Graphics
 			// Dispose any existing cursors to avoid leaking native resources
 			ClearHardwareCursors();
 
-			foreach (var kv in cursors)
+			foreach (KeyValuePair<string, Cursor> kv in cursors)
 			{
 				var template = kv.Value;
 				for (var i = 0; i < template.Sprites.Length; i++)
@@ -120,15 +120,20 @@ namespace OpenRA.Graphics
 
 					try
 					{
-						template.Cursors[i] = CreateHardwareCursor(kv.Key, template.Sprites[i], paddingTL, paddingBR, -template.Bounds.Location);
+						template.Cursors[i] = CreateHardwareCursor(name: kv.Key, data: template.Sprites[i], paddingTL: paddingTL, paddingBR: paddingBR, hotspot: -template.Bounds.Location);
 					}
 					catch (Exception e)
 					{
-						Log.Write("debug", "Failed to initialize hardware cursor for {0}.", template.Name);
-						Log.Write("debug", "Error was: " + e.Message);
+						Log.Write("debug", $"CreateHardwareCursor(name: {kv.Key}, data: {template.Sprites[i]}, paddingTL: {paddingTL}, paddingBR: {paddingBR}, hotspot: {-template.Bounds.Location})");
+						Log.Write("debug", "\tFailed to initialize hardware cursor for {0}.", template.Name);
+						Log.Write("debug", "\tError was: ");
+						Log.Write("debug", e.ToString());
 
-						Console.WriteLine("Failed to initialize hardware cursor for {0}.", template.Name);
-						Console.WriteLine("Error was: " + e.Message);
+						Console.WriteLine($"CreateHardwareCursor(name: {kv.Key}, data: {template.Sprites[i]}, paddingTL: {paddingTL}, paddingBR: {paddingBR}, hotspot: {-template.Bounds.Location})");
+						Console.WriteLine("\tFailed to initialize hardware cursor for {0}.", template.Name);
+						Console.WriteLine("\tError was: ");
+						Console.WriteLine(e.ToString());
+
 						template.Cursors[i] = null;
 					}
 				}
@@ -270,7 +275,8 @@ namespace OpenRA.Graphics
 				}
 			}
 
-			return Game.Renderer.Window.CreateHardwareCursor(name, new Size(newWidth, newHeight), rgbaData, hotspot, graphicSettings.CursorDouble);
+			IHardwareCursor cursor = Game.Renderer.Window.CreateHardwareCursor(name: name, size: new Size(newWidth, newHeight), data: rgbaData, hotspot: hotspot, pixelDouble: graphicSettings.CursorDouble);
+			return cursor;
 		}
 
 		void ClearHardwareCursors()
