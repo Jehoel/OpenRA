@@ -52,6 +52,8 @@ namespace OpenRA.Platforms.Default
 				this.Cursor = SDL.SDL_CreateColorCursor(surface, hotspot.X, hotspot.Y);
 				if (this.Cursor == IntPtr.Zero)
 				{
+					Console.WriteLine("SDL's " + nameof(SDL.SDL_CreateColorCursor) + " failed. Now using .NET reimplementation."); // Is there a better way to log instead of writing directly to the console?
+
 					// This call very occasionally fails on Windows, but often works when retried.
 					// Better idea: C# reimplementation!
 
@@ -62,10 +64,18 @@ namespace OpenRA.Platforms.Default
 					// ...and this is the C# reimplementation.
 					// If this reimplementation ever does fail at the same place (Win32's `CreateIconIndirect`) then an exception will be thrown - so we don't need to check `this.Cursor == IntPtr.Zero` here.
 					this.Cursor = OpenRA.Platforms.Win32.SdlReimplementation.SDL_WIN_CreateCursor(sur, hotspot.X, hotspot.Y);
+
+					Console.WriteLine(".NET reimplementation of " + nameof(OpenRA.Platforms.Win32.SdlReimplementation.SDL_WIN_CreateCursor) + " succeeded.");
+				}
+				else
+				{
+					Console.WriteLine("SDL's " + nameof(SDL.SDL_CreateColorCursor) + " succeeded on the first try.");
 				}
 
 				if (Cursor == IntPtr.Zero)
+				{
 					throw new Sdl2HardwareCursorException($"Failed to create cursor: {SDL.SDL_GetError()}");
+				}
 			}
 			catch
 			{

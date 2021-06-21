@@ -26,6 +26,7 @@ using static SDL2.SDL;
 
 namespace OpenRA.Platforms.Win32
 {
+	/// <summary>https://github.com/OpenRA/OpenRA/issues/10172</summary>
 	public static class SdlReimplementation
 	{
 		[StructLayout(LayoutKind.Sequential)]
