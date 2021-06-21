@@ -16,14 +16,8 @@ using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-namespace OpenRA.Platforms.Default
+namespace OpenRA.Platforms.Win32
 {
-	public enum DibUsage : UInt32
-	{
-		DIB_RGB_COLORS = 0,
-		DIB_PAL_COLORS = 1,
-	}
-
 	public static class Gdi
 	{
 		internal static class GdiNativeMethods

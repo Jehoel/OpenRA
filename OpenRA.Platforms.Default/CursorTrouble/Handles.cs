@@ -15,7 +15,7 @@ using Microsoft.Win32.SafeHandles;
 using OpenRA.Primitives;
 using SDL2;
 
-namespace OpenRA.Platforms.Default
+namespace OpenRA.Platforms.Win32
 {
 	public class SafeDCHandle : SafeHandleZeroOrMinusOneIsInvalid
 	{
