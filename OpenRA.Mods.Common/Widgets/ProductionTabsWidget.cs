@@ -19,6 +19,33 @@ using OpenRA.Widgets;
 
 namespace OpenRA.Mods.Common.Widgets
 {
+	public static class ArghExtensions
+	{
+		public static Dictionary<string, ProductionTabGroup> GetProductionTabGroups(this World world)
+		{
+			if (world is null) throw new ArgumentNullException(nameof(world));
+
+			var actors = world.Map.Rules.Actors.Values;
+
+			return actors
+				.SelectMany(a => a.TraitInfos<ProductionQueueInfo>())
+				.Where(q => q != null && q.Group != null)
+				.Select(q => q.Group)
+				.Distinct()
+				.ToDictionary(
+					g => g,
+					g => new ProductionTabGroup() { Group = g }
+				);
+		}
+
+		public static IEnumerable<ProductionQueue> GetAllProductionQueues(this World world)
+		{
+			if (world is null) throw new ArgumentNullException(nameof(world));
+
+			return world.LocalPlayer.PlayerActor.TraitsImplementing<ProductionQueue>();
+		}
+	}
+
 	public class ProductionTab
 	{
 		public string Name;
@@ -104,8 +131,7 @@ namespace OpenRA.Mods.Common.Widgets
 		{
 			this.world = world;
 
-			Groups = world.Map.Rules.Actors.Values.SelectMany(a => a.TraitInfos<ProductionQueueInfo>())
-				.Select(q => q.Group).Distinct().ToDictionary(g => g, g => new ProductionTabGroup() { Group = g });
+			Groups = world.GetProductionTabGroups();
 
 			// Only visible if the production palette has icons to display
 			IsVisible = () => queueGroup != null && Groups[queueGroup].Tabs.Count > 0;
@@ -132,14 +158,17 @@ namespace OpenRA.Mods.Common.Widgets
 				return true;
 
 			// Prioritize alerted queues
-			var queues = Groups[queueGroup].Tabs.Select(t => t.Queue)
-					.OrderByDescending(q => q.AllQueued().Any(i => i.Done) ? 1 : 0)
-					.ToList();
+			var queues = Groups[queueGroup].Tabs
+				.Select(t => t.Queue)
+				.OrderByDescending(q => q.AllQueued().Any(i => i.Done) ? 1 : 0)
+				.ToList();
 
 			if (reverse) queues.Reverse();
 
-			CurrentQueue = queues.SkipWhile(q => q != CurrentQueue)
-				.Skip(1).FirstOrDefault() ?? queues.FirstOrDefault();
+			this.CurrentQueue = queues
+				.SkipWhile(q => q != this.CurrentQueue)
+				.Skip(1)
+				.FirstOrDefault() ?? queues.FirstOrDefault();
 
 			return true;
 		}
@@ -165,7 +194,6 @@ namespace OpenRA.Mods.Common.Widgets
 		public ProductionQueue CurrentQueue
 		{
 			get => paletteWidget.Value.CurrentQueue;
-
 			set
 			{
 				paletteWidget.Value.CurrentQueue = value;

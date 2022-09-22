@@ -21,19 +21,21 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 		readonly ProductionPaletteWidget palette;
 		readonly World world;
 
-		void SetupProductionGroupButton(ProductionTypeButtonWidget button)
+		readonly ProductionQueue[] allQueues;
+
+		static void SetupProductionGroupButton(World world, ProductionPaletteWidget palette, ProductionTypeButtonWidget button)
 		{
 			if (button == null)
 				return;
 
 			// Classic production queues are initialized at game start, and then never change.
-			var queues = world.LocalPlayer.PlayerActor.TraitsImplementing<ProductionQueue>()
+			var allQueues = world.GetAllProductionQueues()
 				.Where(q => (q.Info.Group ?? q.Info.Type) == button.ProductionGroup)
 				.ToArray();
 
 			Action<bool> selectTab = reverse =>
 			{
-				palette.CurrentQueue = queues.FirstOrDefault(q => q.Enabled);
+				palette.CurrentQueue = allQueues.FirstOrDefault(q => q.Enabled);
 
 				// When a tab is selected, scroll to the top because the current row position may be invalid for the new tab
 				palette.ScrollToTop();
@@ -42,21 +44,32 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				palette.PickUpCompletedBuilding();
 			};
 
-			button.IsDisabled = () => !queues.Any(q => q.BuildableItems().Any());
+			button.IsDisabled = () => !allQueues.Any(q => q.BuildableItems().Any());
 			button.OnMouseUp = mi => selectTab(mi.Modifiers.HasModifier(Modifiers.Shift));
 			button.OnKeyPress = e => selectTab(e.Modifiers.HasModifier(Modifiers.Shift));
 			button.OnClick = () => selectTab(false);
-			button.IsHighlighted = () => queues.Contains(palette.CurrentQueue);
+			button.IsHighlighted = () => allQueues.Contains(palette.CurrentQueue);
 
 			var chromeName = button.ProductionGroup.ToLowerInvariant();
 			var icon = button.Get<ImageWidget>("ICON");
-			icon.GetImageName = () => button.IsDisabled() ? chromeName + "-disabled" :
-				queues.Any(q => q.AllQueued().Any(i => i.Done)) ? chromeName + "-alert" : chromeName;
+			icon.GetImageName = () =>
+			{
+				return button.IsDisabled() ?
+					chromeName + "-disabled" :
+					allQueues.Any(q => q.AllQueued().Any(i => i.Done)) ? chromeName + "-alert" : chromeName;
+			};
 		}
 
 		[ObjectCreator.UseCtor]
 		public ClassicProductionLogic(Widget widget, World world)
 		{
+			if (widget is null) throw new ArgumentNullException( nameof( widget ) );
+			if (world  is null) throw new ArgumentNullException( nameof( world  ) );
+
+			if (widget.Id != "SIDEBAR_PRODUCTION") throw new ArgumentException( message: "widget.Id != \"SIDEBAR_PRODUCTION\"", paramName: nameof( widget ) );
+
+			//
+
 			this.world = world;
 			palette = widget.Get<ProductionPaletteWidget>("PRODUCTION_PALETTE");
 
@@ -122,8 +135,10 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 			}
 
 			var typesContainer = widget.Get("PRODUCTION_TYPES");
-			foreach (var i in typesContainer.Children)
-				SetupProductionGroupButton(i as ProductionTypeButtonWidget);
+			foreach (var button in typesContainer.Children.OfType<ProductionTypeButtonWidget>())
+			{
+				SetupProductionGroupButton(world, this.palette, button);
+			}
 
 			var ticker = widget.Get<LogicTickerWidget>("PRODUCTION_TICKER");
 			ticker.OnTick = () =>
